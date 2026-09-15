@@ -1,0 +1,193 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Branch {
+  id          String       @id @default(cuid())
+  name        String       // e.g. "فرع الرياض - العليا"
+  code        String       @unique // e.g. "RUH-01"
+  city        String?      // e.g. "الرياض"
+  address     String?
+  phone       String?
+  managerName String?
+  status      String       @default("ACTIVE") // ACTIVE, INACTIVE
+  buildings   Building[]
+  apartments  Apartment[]
+  inspections Inspection[]
+  issues      Issue[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model User {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String   @default("123456")
+  role       String   @default("INSPECTION_SUPERVISOR")
+  department String?
+  avatar     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Building {
+  id         String      @id @default(cuid())
+  name       String
+  code       String
+  branchId   String?
+  branch     Branch?     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  floors     Floor[]
+  apartments Apartment[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Floor {
+  id         String      @id @default(cuid())
+  number     String
+  name       String?
+  buildingId String
+  building   Building    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  apartments Apartment[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Apartment {
+  id                 String     @id @default(cuid())
+  number             String     // e.g. "512"
+  branchId           String?
+  branch             Branch?    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  buildingId         String?
+  building           Building?  @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  floorId            String?
+  floor              Floor?     @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  type               String     @default("غرفة فندقية قياسية")
+  isReady            Boolean    @default(true)
+  lastInspectionDate DateTime?
+  notes              String?
+  issues             Issue[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([branchId, number])
+}
+
+model Inspection {
+  id                    String       @id @default(cuid())
+  supervisorName        String       @default("مشرف التفتيش")
+  notes                 String?
+  audioUrl              String?
+  videoUrl              String?
+  status                String       @default("COMPLETED")
+  summary               String?
+  needsClarification    Boolean      @default(false)
+  clarificationQuestion String?
+  rawGeminiResponse     String?
+  branchId              String?
+  branch                Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  issues                Issue[]
+  attachments           Attachment[]
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+}
+
+model Issue {
+  id                  String       @id @default(cuid())
+  roomNumber          String
+  building            String?
+  floor               String?
+  area                String?
+  description         String
+  department          String
+  mainType            String
+  subType             String?
+  needType            String
+  priority            String       @default("متوسطة")
+  status              String       @default("جديد")
+  recommendedAction   String?
+  isRoomReady         Boolean      @default(true)
+  isRecurring         Boolean      @default(false)
+  confidence          Float        @default(1.0)
+  evidenceDescription String?
+  estimatedSlaHours   Int          @default(24)
+  slaDeadline         DateTime?
+  resolutionNotes     String?
+  resolutionProofUrl  String?
+  closedAt            DateTime?
+  closedByUserId      String?
+  branchId            String?
+  branch              Branch?      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  apartmentId         String?
+  apartment           Apartment?   @relation(fields: [apartmentId], references: [id], onDelete: SetNull)
+  inspectionId        String?
+  inspection          Inspection?  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  attachments         Attachment[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model Department {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  code            String?
+  managerName     String?
+  managerEmail    String?
+  slaHoursDefault Int      @default(24)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Category {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  code              String?
+  departmentDefault String?
+  subCategories     String?
+  needTypes         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Attachment {
+  id           String      @id @default(cuid())
+  fileName     String
+  fileUrl      String
+  fileType     String
+  fileSize     Int?
+  mimeType     String?
+  inspectionId String?
+  inspection   Inspection? @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  issueId      String?
+  issue        Issue?      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  title       String
+  type        String
+  period      String?
+  summary     String?
+  metricsJson String?
+  branchId    String?
+  generatedBy String   @default("النظام")
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  action      String
+  performedBy String   @default("النظام")
+  details     String?
+  branchId    String?
+  createdAt   DateTime @default(now())
+}
