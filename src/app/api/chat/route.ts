@@ -104,16 +104,47 @@ ${issuesSummary || "لا توجد بلاغات مفتوحة حالياً."}
       systemInstruction,
     });
 
-    // 3. بناء الرسائل السابقة للدردشة متعددة الأدوار (Multi-turn History)
+    // 3. بناء وتجهيز الرسائل السابقة للدردشة متعددة الأدوار (Multi-turn History)
     let formattedHistory: any[] = [];
     if (history && Array.isArray(history) && history.length > 0) {
-      formattedHistory = history
+      // تحويل الرسائل وتحديد الأدوار
+      const rawTurns = history
         .filter((h: any) => h.text && h.sender)
-        .slice(-8) // الاحتفاظ بآخر 8 جولات للحفاظ على سياق الحوار
         .map((h: any) => ({
           role: h.sender === "user" ? "user" : "model",
           parts: [{ text: h.text }],
         }));
+
+      // استبعاد أي رسائل أولية تحمل دور model (مثل رسائل الترحيب الأولية) والتأكد من أن أول عنصر هو دائماً من دور user
+      const firstUserIdx = rawTurns.findIndex((t) => t.role === "user");
+      if (firstUserIdx !== -1) {
+        const userStartedTurns = rawTurns.slice(firstUserIdx);
+
+        // تنقية السجل لضمان التناوب الصحيح بين user و model
+        const cleaned: any[] = [];
+        for (const turn of userStartedTurns) {
+          if (cleaned.length === 0) {
+            if (turn.role === "user") cleaned.push(turn);
+          } else {
+            const lastRole = cleaned[cleaned.length - 1].role;
+            if (turn.role !== lastRole) {
+              cleaned.push(turn);
+            } else {
+              // دمج النصوص إذا تكرر نفس الدور بشكل متتالي
+              cleaned[cleaned.length - 1].parts[0].text += `\n${turn.parts[0].text}`;
+            }
+          }
+        }
+
+        // بما أن الرسالة الحالية المرسلة لـ Gemini ستكون من دور user عبر sendMessage،
+        // فيجب أن ينتهي سجل history دائماً بدور model لضمان التناوب السليم
+        while (cleaned.length > 0 && cleaned[cleaned.length - 1].role !== "model") {
+          cleaned.pop();
+        }
+
+        // الاحتفاظ بآخر الحوارات للحفاظ على السياق وسرعة الاستجابة
+        formattedHistory = cleaned.slice(-10);
+      }
     }
 
     // 4. بناء محتوى الطلب الحالي متعدد الوسائط
